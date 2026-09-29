@@ -14,6 +14,7 @@
   gpio
   shift_out
   uart_tx
+  uart_rx
   proteus_core))
 
 (executable
@@ -65,3 +66,8 @@
  (name generate_uart_tx)
  (libraries proteus hardcaml)
  (modules generate_uart_tx))
+
+(executable
+ (name generate_uart_rx)
+ (libraries proteus hardcaml)
+ (modules generate_uart_rx))
