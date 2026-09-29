@@ -1,0 +1,67 @@
+(library
+ (name proteus)
+ (libraries hardcaml)
+ (preprocess (pps ppx_hardcaml))
+ (modules
+  counter
+  instruction
+  program_counter
+  instruction_memory
+  register_file
+  execution_unit
+  pc_control
+  wait_counter
+  gpio
+  shift_out
+  uart_tx
+  proteus_core))
+
+(executable
+ (name generate_counter)
+ (libraries proteus hardcaml)
+ (modules generate_counter))
+
+(executable
+ (name generate_instruction)
+ (libraries proteus hardcaml)
+ (modules generate_instruction))
+
+(executable
+ (name generate_program_counter)
+ (libraries proteus hardcaml)
+ (modules generate_program_counter))
+
+(executable
+ (name generate_instruction_memory)
+ (libraries proteus hardcaml)
+ (modules generate_instruction_memory))
+
+(executable
+ (name generate_register_file)
+ (libraries proteus hardcaml)
+ (modules generate_register_file))
+
+(executable
+ (name generate_execution_unit)
+ (libraries proteus hardcaml)
+ (modules generate_execution_unit))
+
+(executable
+ (name generate_proteus_core)
+ (libraries proteus hardcaml)
+ (modules generate_proteus_core))
+
+(executable
+ (name generate_gpio)
+ (libraries proteus hardcaml)
+ (modules generate_gpio))
+
+(executable
+ (name generate_shift_out)
+ (libraries proteus hardcaml)
+ (modules generate_shift_out))
+
+(executable
+ (name generate_uart_tx)
+ (libraries proteus hardcaml)
+ (modules generate_uart_tx))

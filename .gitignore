@@ -1,0 +1,7 @@
+_build/
+*.vcd
+*.fst
+*.sim
+sim/*_sim
+sim/*_tb
+*.png
