@@ -12,7 +12,7 @@ module I = struct
     ; uart_done : 'a
     ; uart_rx_valid : 'a
     ; spi_busy : 'a
-    ; spi_done : 'a
+    ; spi_valid : 'a
     }
   [@@deriving hardcaml]
 end
@@ -33,7 +33,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_jnz = i.opcode ==:. 5 in
   let is_uart_tx = i.opcode ==:. 11 in
   let is_uart_rx = i.opcode ==:. 12 in
-  let is_spi_tx = i.opcode ==:. 13 in
+  let is_spi_xfer = i.opcode ==:. 13 in
 
   let register_nonzero =
     i.register_value <>:. 0
@@ -59,7 +59,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_wait &: i.wait_done
   in
 
-  (* Keep CPU on UART_TX until transmission finishes. *)
   let uart_tx_active =
     is_uart_tx
   in
@@ -68,7 +67,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_uart_tx &: i.uart_done
   in
 
-  (* Keep CPU on UART_RX until a byte is available. *)
   let uart_rx_active =
     is_uart_rx
   in
@@ -77,20 +75,26 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_uart_rx &: i.uart_rx_valid
   in
 
-  (* Keep CPU on SPI_TX until SPI transaction finishes. *)
-  let spi_tx_active =
-    is_spi_tx
+  (*
+   * SPI_XFER does not advance when the SPI engine merely
+   * finishes clocking.
+   *
+   * It advances when spi_valid says the received byte has
+   * been registered and is ready to write into the CPU register.
+   *)
+  let spi_xfer_active =
+    is_spi_xfer
   in
 
-  let spi_tx_finished =
-    is_spi_tx &: i.spi_done
+  let spi_xfer_finished =
+    is_spi_xfer &: i.spi_valid
   in
 
   let pc_enable =
     ((~:wait_active) |: wait_finished)
     &: ((~:uart_tx_active) |: uart_tx_finished)
     &: ((~:uart_rx_active) |: uart_rx_finished)
-    &: ((~:spi_tx_active) |: spi_tx_finished)
+    &: ((~:spi_xfer_active) |: spi_xfer_finished)
   in
 
   let pc_target =

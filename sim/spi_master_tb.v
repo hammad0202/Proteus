@@ -9,53 +9,110 @@ module spi_master_tb;
     reg [7:0] data_in;
     reg [7:0] clock_period;
 
+    reg miso;
+
     wire sclk;
     wire mosi;
     wire cs_n;
     wire busy;
     wire done_;
 
-    reg [7:0] received_data;
+    wire [7:0] data_out;
+    wire valid;
+
+    reg [7:0] captured_mosi;
     integer bit_count;
+
+    /*
+     * Fake SPI slave response.
+     *
+     * Slave will return:
+     *
+     * 0x3C = 00111100
+     */
+    reg [7:0] slave_data;
+    integer slave_bit_index;
 
     spi_master dut (
         .clk(clk),
         .reset(reset),
         .start(start),
         .data_in(data_in),
+        .miso(miso),
         .clock_period(clock_period),
+
         .sclk(sclk),
         .mosi(mosi),
         .cs_n(cs_n),
         .busy(busy),
-        .done_(done_)
+        .done_(done_),
+        .data_out(data_out),
+        .valid(valid)
     );
 
     /*
      * 100 MHz system clock.
-     *
-     * One system-clock cycle = 10 ns.
      */
     always #5 clk = ~clk;
 
     /*
-     * SPI Mode 0 receiver model.
+     * Capture MOSI exactly like a Mode 0 slave.
      *
-     * Mode 0 samples MOSI on the rising edge of SCLK.
-     * Capture exactly eight bits.
+     * Data is sampled on rising SCLK.
      */
     always @(posedge sclk) begin
+
         if (!cs_n) begin
-            received_data = {received_data[6:0], mosi};
-            bit_count = bit_count + 1;
+
+            captured_mosi =
+                {captured_mosi[6:0], mosi};
+
+            bit_count =
+                bit_count + 1;
 
             $display(
-                "SPI SAMPLE %0d: MOSI=%b  DATA=%h",
+                "SPI SAMPLE %0d: MOSI=%b MISO=%b TX_CAPTURE=%h",
                 bit_count,
                 mosi,
-                received_data
+                miso,
+                captured_mosi
             );
+
         end
+
+    end
+
+    /*
+     * SPI Mode 0 slave behavior.
+     *
+     * The first MISO bit must already be valid before
+     * the first rising edge.
+     *
+     * After each falling edge, advance to the next bit.
+     */
+    always @(negedge cs_n) begin
+
+        slave_bit_index = 7;
+        miso = slave_data[7];
+
+    end
+
+    always @(negedge sclk) begin
+
+        if (!cs_n) begin
+
+            if (slave_bit_index > 0) begin
+
+                slave_bit_index =
+                    slave_bit_index - 1;
+
+                miso =
+                    slave_data[slave_bit_index];
+
+            end
+
+        end
+
     end
 
     initial begin
@@ -67,15 +124,17 @@ module spi_master_tb;
         data_in = 8'h00;
         clock_period = 8'd8;
 
-        received_data = 8'h00;
+        miso = 0;
+
+        captured_mosi = 8'h00;
         bit_count = 0;
+
+        slave_data = 8'h3C;
+        slave_bit_index = 7;
 
         $dumpfile("sim/spi_master.vcd");
         $dumpvars(0, spi_master_tb);
 
-        /*
-         * Reset.
-         */
         #20;
         reset = 0;
 
@@ -83,78 +142,94 @@ module spi_master_tb;
 
         $display("");
         $display("========================================");
-        $display("PROTEUS SPI MASTER TEST");
+        $display("PROTEUS FULL-DUPLEX SPI TEST");
         $display("========================================");
         $display("");
 
-        /*
-         * Transmit:
-         *
-         * 0xA5 = 10100101
-         *
-         * Expected MOSI sequence:
-         *
-         * 1 0 1 0 0 1 0 1
-         */
-
         data_in = 8'hA5;
 
-        $display("Starting SPI transmission...");
-        $display("TX DATA = 0x%h", data_in);
+        $display("Master TX : 0x%h", data_in);
+        $display("Slave TX  : 0x%h", slave_data);
         $display("");
 
-        /*
-         * Pulse start for one system clock.
-         */
         start = 1;
 
         @(posedge clk);
         #1;
+
         start = 0;
 
-        /*
-         * Wait for transaction to begin.
-         */
         wait (busy == 1'b1);
 
-        $display("SPI BUSY asserted.");
-        $display("CS_N = %b", cs_n);
+        $display("SPI transaction started.");
         $display("");
 
-        /*
-         * Wait for transaction to finish.
-         */
         wait (busy == 1'b0);
 
         #20;
 
         $display("");
         $display("========================================");
-        $display("SPI TRANSACTION COMPLETE");
+        $display("FULL-DUPLEX RESULT");
         $display("========================================");
 
-        $display("Bits captured : %0d", bit_count);
-        $display("Expected      : 0xA5");
-        $display("Received      : 0x%h", received_data);
+        $display(
+            "MOSI expected : 0xA5"
+        );
+
+        $display(
+            "MOSI captured : 0x%h",
+            captured_mosi
+        );
+
+        $display(
+            "MISO expected : 0x3C"
+        );
+
+        $display(
+            "MISO received : 0x%h",
+            data_out
+        );
+
+        $display(
+            "Bits          : %0d",
+            bit_count
+        );
 
         if (bit_count !== 8) begin
 
             $display("");
-            $display("ERROR: Expected 8 SPI bits.");
-            $display("Got %0d bits.", bit_count);
+            $display(
+                "ERROR: Expected 8 bits, got %0d",
+                bit_count
+            );
 
             $finish;
 
         end
 
-        if (received_data !== 8'hA5) begin
+        if (captured_mosi !== 8'hA5) begin
 
             $display("");
-            $display("ERROR: SPI DATA MISMATCH");
+            $display("ERROR: MOSI DATA MISMATCH");
 
             $display(
-                "Expected 0xA5, received 0x%h",
-                received_data
+                "Expected 0xA5, got 0x%h",
+                captured_mosi
+            );
+
+            $finish;
+
+        end
+
+        if (data_out !== 8'h3C) begin
+
+            $display("");
+            $display("ERROR: MISO DATA MISMATCH");
+
+            $display(
+                "Expected 0x3C, got 0x%h",
+                data_out
             );
 
             $finish;
@@ -163,8 +238,9 @@ module spi_master_tb;
 
         $display("");
         $display("========================================");
-        $display("SPI MASTER SUCCESS");
-        $display("0xA5 transmitted correctly.");
+        $display("FULL-DUPLEX SPI SUCCESS");
+        $display("MOSI: 0xA5 transmitted correctly.");
+        $display("MISO: 0x3C received correctly.");
         $display("========================================");
         $display("");
 

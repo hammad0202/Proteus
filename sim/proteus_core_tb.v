@@ -4,7 +4,9 @@ module proteus_core_tb;
 
     reg clk;
     reg reset;
+
     reg uart_rx;
+    reg spi_miso;
 
     wire [7:0]  pc;
     wire [15:0] instruction;
@@ -26,14 +28,21 @@ module proteus_core_tb;
     wire spi_cs_n;
     wire spi_busy;
 
-    reg [7:0] spi_received;
+    wire [7:0] spi_data_out;
+    wire spi_valid;
+
+    reg [7:0] captured_mosi;
     integer spi_bit_count;
-    integer transaction_count;
+
+    reg [7:0] slave_data;
+    integer slave_bit_index;
 
     proteus_core dut (
         .clk(clk),
         .reset(reset),
+
         .uart_rx(uart_rx),
+        .spi_miso(spi_miso),
 
         .pc(pc),
         .instruction(instruction),
@@ -53,7 +62,9 @@ module proteus_core_tb;
         .spi_sclk(spi_sclk),
         .spi_mosi(spi_mosi),
         .spi_cs_n(spi_cs_n),
-        .spi_busy(spi_busy)
+        .spi_busy(spi_busy),
+        .spi_data_out(spi_data_out),
+        .spi_valid(spi_valid)
     );
 
     /*
@@ -62,25 +73,26 @@ module proteus_core_tb;
     always #5 clk = ~clk;
 
     /*
-     * SPI Mode 0 receiver.
+     * Capture the byte transmitted by PROTEUS.
      *
-     * Capture MOSI on rising SCLK.
+     * SPI Mode 0 samples MOSI on rising SCLK.
      */
     always @(posedge spi_sclk) begin
 
         if (!spi_cs_n) begin
 
-            spi_received =
-                {spi_received[6:0], spi_mosi};
+            captured_mosi =
+                {captured_mosi[6:0], spi_mosi};
 
             spi_bit_count =
                 spi_bit_count + 1;
 
             $display(
-                "SPI BIT %0d: MOSI=%b DATA=%h",
+                "SPI BIT %0d: MOSI=%b MISO=%b TX_CAPTURE=%h",
                 spi_bit_count,
                 spi_mosi,
-                spi_received
+                spi_miso,
+                captured_mosi
             );
 
         end
@@ -88,27 +100,37 @@ module proteus_core_tb;
     end
 
     /*
-     * Detect completed SPI transactions.
+     * Fake SPI Mode 0 slave.
+     *
+     * It returns:
+     *
+     * 0x3C = 00111100
+     *
+     * First MISO bit is available before the first rising edge.
      */
-    always @(posedge spi_cs_n) begin
+    always @(negedge spi_cs_n) begin
 
-        if (!reset && spi_bit_count != 0) begin
+        slave_bit_index = 7;
+        spi_miso = slave_data[7];
 
-            transaction_count =
-                transaction_count + 1;
+    end
 
-            $display("");
-            $display(
-                "SPI TRANSACTION %0d COMPLETE",
-                transaction_count
-            );
+    /*
+     * Advance slave data after each falling SCLK edge.
+     */
+    always @(negedge spi_sclk) begin
 
-            $display(
-                "Captured byte = 0x%h",
-                spi_received
-            );
+        if (!spi_cs_n) begin
 
-            $display("");
+            if (slave_bit_index > 0) begin
+
+                slave_bit_index =
+                    slave_bit_index - 1;
+
+                spi_miso =
+                    slave_data[slave_bit_index];
+
+            end
 
         end
 
@@ -119,21 +141,20 @@ module proteus_core_tb;
         clk = 0;
         reset = 1;
 
-        /*
-         * UART is unused during this test,
-         * so leave the RX line idle high.
-         */
         uart_rx = 1;
+        spi_miso = 0;
 
-        spi_received = 8'h00;
+        captured_mosi = 8'h00;
         spi_bit_count = 0;
-        transaction_count = 0;
+
+        slave_data = 8'h3C;
+        slave_bit_index = 7;
 
         $dumpfile("sim/proteus_core.vcd");
         $dumpvars(0, proteus_core_tb);
 
         $monitor(
-            "time=%0t PC=%d INST=%h OP=%h | R0=%h R1=%h | SPI_BUSY=%b CS=%b SCLK=%b MOSI=%b",
+            "time=%0t PC=%d INST=%h OP=%h | R0=%h R1=%h | SPI_BUSY=%b VALID=%b CS=%b SCLK=%b MOSI=%b MISO=%b RX=%h",
             $time,
             pc,
             instruction,
@@ -141,65 +162,152 @@ module proteus_core_tb;
             r0,
             r1,
             spi_busy,
+            spi_valid,
             spi_cs_n,
             spi_sclk,
-            spi_mosi
+            spi_mosi,
+            spi_miso,
+            spi_data_out
         );
 
-        /*
-         * Reset CPU.
-         */
         #20;
         reset = 0;
 
         /*
-         * Give CPU time to execute:
+         * Program:
          *
-         * SET R0, 0xA5
-         * SET R1, 8
-         * SPI_TX R0
+         * PC 0: SET R0, 0xA5
+         * PC 1: SET R1, 8
+         * PC 2: SPI_XFER R0
+         * PC 3: JMP 2
          */
+
         wait (spi_busy == 1'b1);
 
         $display("");
         $display("========================================");
-        $display("CPU STARTED SPI TRANSACTION");
+        $display("CPU STARTED SPI_XFER");
         $display("========================================");
 
-        $display("R0 = 0x%h", r0);
-        $display("R1 = %0d cycles", r1);
+        $display(
+            "R0 before transfer = 0x%h",
+            r0
+        );
+
+        $display(
+            "Slave response     = 0x%h",
+            slave_data
+        );
 
         $display("");
 
         /*
-         * Wait for first transaction.
+         * CPU must remain on SPI_XFER while transfer occurs.
          */
-        wait (spi_busy == 1'b0);
+        if (pc !== 8'd2) begin
 
-        #20;
+            $display(
+                "ERROR: CPU did not stall at PC 2."
+            );
+
+            $finish;
+
+        end
+
+        /*
+         * Wait until received byte becomes valid.
+         */
+        wait (spi_valid == 1'b1);
+
+        $display("");
+        $display("SPI result became valid.");
+        $display(
+            "SPI data_out = 0x%h",
+            spi_data_out
+        );
+
+        /*
+         * Wait for register-file write edge.
+         */
+        @(posedge clk);
+        #1;
 
         $display("");
         $display("========================================");
-        $display("CPU SPI RESULT");
+        $display("CPU FULL-DUPLEX SPI RESULT");
         $display("========================================");
+
+        $display(
+            "MOSI expected : 0xA5"
+        );
+
+        $display(
+            "MOSI captured : 0x%h",
+            captured_mosi
+        );
+
+        $display(
+            "MISO expected : 0x3C"
+        );
+
+        $display(
+            "SPI received  : 0x%h",
+            spi_data_out
+        );
+
+        $display(
+            "R0 after XFER : 0x%h",
+            r0
+        );
 
         $display(
             "Bits captured : %0d",
             spi_bit_count
         );
 
-        $display(
-            "Expected      : 0xA5"
-        );
+        /*
+         * Verify MOSI.
+         */
+        if (captured_mosi !== 8'hA5) begin
 
-        $display(
-            "Received      : 0x%h",
-            spi_received
-        );
+            $display("");
+            $display("ERROR: MOSI DATA MISMATCH");
+
+            $finish;
+
+        end
 
         /*
-         * Verify exactly eight bits.
+         * Verify MISO receive engine.
          */
+        if (spi_data_out !== 8'h3C) begin
+
+            $display("");
+            $display("ERROR: SPI RX DATA MISMATCH");
+
+            $finish;
+
+        end
+
+        /*
+         * Most important CPU-level check:
+         *
+         * SPI_XFER R0 must replace R0 with the received byte.
+         */
+        if (r0 !== 32'h0000003C) begin
+
+            $display("");
+            $display("ERROR: CPU REGISTER WRITEBACK FAILED");
+
+            $display(
+                "Expected R0 = 0x0000003C, got 0x%h",
+                r0
+            );
+
+            $finish;
+
+        end
+
         if (spi_bit_count !== 8) begin
 
             $display("");
@@ -212,32 +320,14 @@ module proteus_core_tb;
 
         end
 
-        /*
-         * Verify transmitted byte.
-         */
-        if (spi_received !== 8'hA5) begin
-
-            $display("");
-            $display("ERROR: SPI DATA MISMATCH");
-
-            $display(
-                "Expected 0xA5, got 0x%h",
-                spi_received
-            );
-
-            $finish;
-
-        end
-
         $display("");
         $display("========================================");
-        $display("CPU SPI_TX SUCCESS");
-        $display("PROTEUS EXECUTED SPI_TX R0");
-        $display("0xA5 TRANSMITTED CORRECTLY");
+        $display("CPU SPI_XFER SUCCESS");
+        $display("PROTEUS TRANSMITTED 0xA5");
+        $display("PROTEUS RECEIVED    0x3C");
+        $display("R0 UPDATED TO       0x0000003C");
         $display("========================================");
         $display("");
-
-        #50;
 
         $finish;
 

@@ -6,6 +6,7 @@ module I = struct
     { clk : 'a
     ; reset : 'a
     ; uart_rx : 'a
+    ; spi_miso : 'a
     }
   [@@deriving hardcaml]
 end
@@ -28,6 +29,8 @@ module O = struct
     ; spi_mosi : 'a
     ; spi_cs_n : 'a
     ; spi_busy : 'a
+    ; spi_data_out : 'a [@bits 8]
+    ; spi_valid : 'a
     }
   [@@deriving hardcaml]
 end
@@ -118,7 +121,6 @@ let create (scope : Scope.t) (i : _ I.t) =
     select registers.r1 7 0
   in
 
-  (* R1 = 0 is treated as a safe default of 8 cycles. *)
   let protocol_period =
     mux2
       (configured_protocol_period ==:. 0)
@@ -164,6 +166,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; reset = i.reset
       ; start = spi_start
       ; data_in = spi_data
+      ; miso = i.spi_miso
       ; clock_period = protocol_period
       }
   in
@@ -182,6 +185,8 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; uart_rx_valid = uart_rx.valid
       ; uart_rx_data = uart_rx.data_out
       ; spi_busy = spi.busy
+      ; spi_valid = spi.valid
+      ; spi_data_out = spi.data_out
       }
   in
 
@@ -231,7 +236,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; uart_done = uart_tx.done_
       ; uart_rx_valid = uart_rx.valid
       ; spi_busy = spi.busy
-      ; spi_done = spi.done_
+      ; spi_valid = spi.valid
       }
   in
 
@@ -296,4 +301,6 @@ let create (scope : Scope.t) (i : _ I.t) =
   ; spi_mosi = spi.mosi
   ; spi_cs_n = spi.cs_n
   ; spi_busy = spi.busy
+  ; spi_data_out = spi.data_out
+  ; spi_valid = spi.valid
   }

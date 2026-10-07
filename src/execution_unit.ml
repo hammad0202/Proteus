@@ -11,6 +11,8 @@ module I = struct
     ; uart_rx_valid : 'a
     ; uart_rx_data : 'a [@bits 8]
     ; spi_busy : 'a
+    ; spi_valid : 'a
+    ; spi_data_out : 'a [@bits 8]
     }
   [@@deriving hardcaml]
 end
@@ -42,10 +44,14 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_shift_out = i.opcode ==:. 9 in
   let is_uart_tx = i.opcode ==:. 11 in
   let is_uart_rx = i.opcode ==:. 12 in
-  let is_spi_tx = i.opcode ==:. 13 in
+  let is_spi_xfer = i.opcode ==:. 13 in
 
   let uart_rx_complete =
     is_uart_rx &: i.uart_rx_valid
+  in
+
+  let spi_xfer_complete =
+    is_spi_xfer &: i.spi_valid
   in
 
   let write_enable =
@@ -53,6 +59,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
     |: is_clr
     |: is_dec
     |: uart_rx_complete
+    |: spi_xfer_complete
   in
 
   let write_register =
@@ -75,6 +82,10 @@ let create (_scope : Scope.t) (i : _ I.t) =
     uresize i.uart_rx_data 32
   in
 
+  let spi_rx_data =
+    uresize i.spi_data_out 32
+  in
+
   let write_data =
     mux2 is_set
       set_data
@@ -82,7 +93,9 @@ let create (_scope : Scope.t) (i : _ I.t) =
         clr_data
         (mux2 is_dec
           dec_data
-          uart_rx_data))
+          (mux2 uart_rx_complete
+            uart_rx_data
+            spi_rx_data)))
   in
 
   let gpio_write_enable =
@@ -113,8 +126,21 @@ let create (_scope : Scope.t) (i : _ I.t) =
     uart_rx_complete
   in
 
+  (*
+   * SPI_XFER starts only when:
+   *
+   * 1. opcode = 0xD
+   * 2. SPI engine is idle
+   * 3. previous result is not currently being committed
+   *
+   * The spi_valid condition prevents the instruction from
+   * accidentally starting another transaction during the
+   * result-write cycle.
+   *)
   let spi_start =
-    is_spi_tx &: (~:(i.spi_busy))
+    is_spi_xfer
+    &: (~:(i.spi_busy))
+    &: (~:(i.spi_valid))
   in
 
   let spi_data =

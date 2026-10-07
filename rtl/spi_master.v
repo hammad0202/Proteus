@@ -1,4 +1,5 @@
 module spi_master (
+    miso,
     data_in,
     clock_period,
     reset,
@@ -8,9 +9,12 @@ module spi_master (
     mosi,
     cs_n,
     busy,
-    done_
+    done_,
+    data_out,
+    valid
 );
 
+    input miso;
     input [7:0] data_in;
     input [7:0] clock_period;
     input reset;
@@ -21,143 +25,191 @@ module spi_master (
     output cs_n;
     output busy;
     output done_;
+    output [7:0] data_out;
+    output valid;
 
-    wire _30;
-    wire [7:0] _39;
-    wire [7:0] _5;
-    wire _34;
-    wire [6:0] _33;
-    wire [7:0] _35;
-    wire _31;
-    wire _32;
-    wire [7:0] _36;
-    wire [7:0] _37;
-    reg [7:0] _41;
-    wire [7:0] _6;
-    wire _42;
-    wire _72;
-    wire _73;
-    wire [3:0] _27;
-    wire _28;
-    wire [7:0] _56;
-    wire [7:0] _48;
-    wire [7:0] _9;
-    wire _47;
-    wire [7:0] _49;
-    wire [6:0] _50;
-    wire gnd;
-    wire [7:0] _51;
-    wire _53;
-    wire [7:0] _55;
-    wire [7:0] _57;
+    wire _38;
+    reg _40;
+    wire _1;
+    wire [7:0] _53;
+    wire _4;
+    wire [6:0] _43;
     wire [7:0] _44;
-    wire [7:0] _58;
-    wire [7:0] _59;
+    wire _41;
+    wire _42;
+    wire [7:0] _45;
+    wire [7:0] _47;
+    reg [7:0] _50;
+    wire [7:0] _5;
+    wire [7:0] _51;
+    reg [7:0] _54;
+    wire [7:0] _6;
+    wire _55;
+    wire [7:0] _12;
+    wire [6:0] _58;
     wire [7:0] _60;
-    reg [7:0] _63;
-    wire [7:0] _10;
-    wire _24;
-    wire [3:0] _20;
+    wire _56;
+    wire _57;
+    wire [7:0] _61;
+    wire [7:0] _62;
+    reg [7:0] _65;
+    wire [7:0] _13;
+    wire _66;
+    wire _96;
+    wire _97;
+    wire [3:0] _34;
+    wire _35;
+    wire [7:0] _80;
+    wire [7:0] _72;
+    wire [7:0] _16;
+    wire _71;
+    wire [7:0] _73;
+    wire [6:0] _74;
+    wire gnd;
+    wire [7:0] _75;
+    wire _77;
+    wire [7:0] _79;
+    wire [7:0] _81;
+    wire [7:0] _68;
+    wire [7:0] _82;
+    wire [7:0] _83;
+    wire [7:0] _84;
+    reg [7:0] _87;
+    wire [7:0] _17;
+    wire _31;
+    wire [3:0] _27;
     wire vdd;
-    wire _12;
-    wire _14;
-    wire [3:0] _67;
-    wire [3:0] _65;
-    wire [3:0] _66;
-    wire [3:0] _68;
-    reg [3:0] _71;
-    wire [3:0] _15;
+    wire _19;
     wire _21;
-    wire _22;
-    wire _25;
-    wire _26;
+    wire [3:0] _91;
+    wire [3:0] _89;
+    wire [3:0] _90;
+    wire [3:0] _92;
+    reg [3:0] _95;
+    wire [3:0] _22;
+    wire _28;
     wire _29;
-    wire _74;
-    wire _17;
-    wire _75;
-    reg _78;
-    wire _18;
-    assign _30 = ~ _22;
-    assign _39 = 8'b00000000;
-    assign _5 = data_in;
-    assign _34 = 1'b0;
-    assign _33 = _6[6:0];
-    assign _35 = { _33,
-                   _34 };
-    assign _31 = ~ _28;
-    assign _32 = _26 & _31;
-    assign _36 = _32 ? _35 : _6;
-    assign _37 = _17 ? _5 : _36;
-    always @(posedge _14 or posedge _12) begin
-        if (_12)
-            _41 <= _39;
+    wire _32;
+    wire _33;
+    wire _36;
+    wire _98;
+    wire _24;
+    wire _99;
+    reg _102;
+    wire _25;
+    assign _38 = 1'b0;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _40 <= _38;
         else
-            _41 <= _37;
+            _40 <= _36;
     end
-    assign _6 = _41;
-    assign _42 = _6[7:7];
-    assign _72 = ~ _18;
-    assign _73 = _25 ? _72 : _18;
-    assign _27 = 4'b0001;
-    assign _28 = _15 == _27;
-    assign _56 = 8'b00000001;
-    assign _48 = 8'b00000010;
-    assign _9 = clock_period;
-    assign _47 = _9 == _39;
-    assign _49 = _47 ? _48 : _9;
-    assign _50 = _49[7:1];
+    assign _1 = _40;
+    assign _53 = 8'b00000000;
+    assign _4 = miso;
+    assign _43 = _5[6:0];
+    assign _44 = { _43,
+                   _4 };
+    assign _41 = ~ _25;
+    assign _42 = _32 & _41;
+    assign _45 = _42 ? _44 : _5;
+    assign _47 = _24 ? _53 : _45;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _50 <= _53;
+        else
+            _50 <= _47;
+    end
+    assign _5 = _50;
+    assign _51 = _36 ? _5 : _6;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _54 <= _53;
+        else
+            _54 <= _51;
+    end
+    assign _6 = _54;
+    assign _55 = ~ _29;
+    assign _12 = data_in;
+    assign _58 = _13[6:0];
+    assign _60 = { _58,
+                   _38 };
+    assign _56 = ~ _35;
+    assign _57 = _33 & _56;
+    assign _61 = _57 ? _60 : _13;
+    assign _62 = _24 ? _12 : _61;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _65 <= _53;
+        else
+            _65 <= _62;
+    end
+    assign _13 = _65;
+    assign _66 = _13[7:7];
+    assign _96 = ~ _25;
+    assign _97 = _32 ? _96 : _25;
+    assign _34 = 4'b0001;
+    assign _35 = _22 == _34;
+    assign _80 = 8'b00000001;
+    assign _72 = 8'b00000010;
+    assign _16 = clock_period;
+    assign _71 = _16 == _53;
+    assign _73 = _71 ? _72 : _16;
+    assign _74 = _73[7:1];
     assign gnd = 1'b0;
-    assign _51 = { gnd,
-                   _50 };
-    assign _53 = _51 == _39;
-    assign _55 = _53 ? _56 : _51;
-    assign _57 = _55 - _56;
-    assign _44 = _10 - _56;
-    assign _58 = _24 ? _57 : _44;
-    assign _59 = _22 ? _58 : _10;
-    assign _60 = _17 ? _57 : _59;
-    always @(posedge _14 or posedge _12) begin
-        if (_12)
-            _63 <= _39;
+    assign _75 = { gnd,
+                   _74 };
+    assign _77 = _75 == _53;
+    assign _79 = _77 ? _80 : _75;
+    assign _81 = _79 - _80;
+    assign _68 = _17 - _80;
+    assign _82 = _31 ? _81 : _68;
+    assign _83 = _29 ? _82 : _17;
+    assign _84 = _24 ? _81 : _83;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _87 <= _53;
         else
-            _63 <= _60;
+            _87 <= _84;
     end
-    assign _10 = _63;
-    assign _24 = _10 == _39;
-    assign _20 = 4'b0000;
+    assign _17 = _87;
+    assign _31 = _17 == _53;
+    assign _27 = 4'b0000;
     assign vdd = 1'b1;
-    assign _12 = reset;
-    assign _14 = clk;
-    assign _67 = 4'b1000;
-    assign _65 = _15 - _27;
-    assign _66 = _26 ? _65 : _15;
-    assign _68 = _17 ? _67 : _66;
-    always @(posedge _14 or posedge _12) begin
-        if (_12)
-            _71 <= _20;
+    assign _19 = reset;
+    assign _21 = clk;
+    assign _91 = 4'b1000;
+    assign _89 = _22 - _34;
+    assign _90 = _33 ? _89 : _22;
+    assign _92 = _24 ? _91 : _90;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _95 <= _27;
         else
-            _71 <= _68;
+            _95 <= _92;
     end
-    assign _15 = _71;
-    assign _21 = _15 == _20;
-    assign _22 = ~ _21;
-    assign _25 = _22 & _24;
-    assign _26 = _25 & _18;
-    assign _29 = _26 & _28;
-    assign _74 = _29 ? gnd : _73;
-    assign _17 = start;
-    assign _75 = _17 ? gnd : _74;
-    always @(posedge _14 or posedge _12) begin
-        if (_12)
-            _78 <= _34;
+    assign _22 = _95;
+    assign _28 = _22 == _27;
+    assign _29 = ~ _28;
+    assign _32 = _29 & _31;
+    assign _33 = _32 & _25;
+    assign _36 = _33 & _35;
+    assign _98 = _36 ? gnd : _97;
+    assign _24 = start;
+    assign _99 = _24 ? gnd : _98;
+    always @(posedge _21 or posedge _19) begin
+        if (_19)
+            _102 <= _38;
         else
-            _78 <= _75;
+            _102 <= _99;
     end
-    assign _18 = _78;
-    assign sclk = _18;
-    assign mosi = _42;
-    assign cs_n = _30;
-    assign busy = _22;
-    assign done_ = _29;
+    assign _25 = _102;
+    assign sclk = _25;
+    assign mosi = _66;
+    assign cs_n = _55;
+    assign busy = _29;
+    assign done_ = _36;
+    assign data_out = _6;
+    assign valid = _1;
 
 endmodule
