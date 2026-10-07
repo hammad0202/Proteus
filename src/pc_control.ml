@@ -10,6 +10,7 @@ module I = struct
     ; wait_done : 'a
     ; uart_busy : 'a
     ; uart_done : 'a
+    ; uart_rx_valid : 'a
     }
   [@@deriving hardcaml]
 end
@@ -29,6 +30,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_jmp = i.opcode ==:. 4 in
   let is_jnz = i.opcode ==:. 5 in
   let is_uart_tx = i.opcode ==:. 11 in
+  let is_uart_rx = i.opcode ==:. 12 in
 
   let register_nonzero =
     i.register_value <>:. 0
@@ -43,6 +45,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   (* WAIT *)
+
   let wait_load =
     is_wait &: (i.wait_busy ==:. 0)
   in
@@ -56,23 +59,37 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   (* UART_TX
-     
+
      Keep the PC on the UART_TX instruction for the entire
-     transmission. The execution unit starts UART only when
-     uart_busy = 0, so the same instruction cannot restart
-     while the UART is busy.
+     transmission.
   *)
-  let uart_active =
+
+  let uart_tx_active =
     is_uart_tx
   in
 
-  let uart_finished =
+  let uart_tx_finished =
     is_uart_tx &: i.uart_done
+  in
+
+  (* UART_RX
+
+     UART RX is always listening. The CPU remains on the
+     UART_RX instruction until a byte has been received.
+  *)
+
+  let uart_rx_active =
+    is_uart_rx
+  in
+
+  let uart_rx_finished =
+    is_uart_rx &: i.uart_rx_valid
   in
 
   let pc_enable =
     ((~:wait_active) |: wait_finished)
-    &: ((~:uart_active) |: uart_finished)
+    &: ((~:uart_tx_active) |: uart_tx_finished)
+    &: ((~:uart_rx_active) |: uart_rx_finished)
   in
 
   let pc_target =

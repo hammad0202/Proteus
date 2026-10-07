@@ -8,6 +8,8 @@ module I = struct
     ; immediate : 'a [@bits 8]
     ; register_value : 'a [@bits 32]
     ; uart_busy : 'a
+    ; uart_rx_valid : 'a
+    ; uart_rx_data : 'a [@bits 8]
     }
   [@@deriving hardcaml]
 end
@@ -23,6 +25,7 @@ module O = struct
     ; shift_data : 'a [@bits 8]
     ; uart_start : 'a
     ; uart_data : 'a [@bits 8]
+    ; uart_rx_consume : 'a
     }
   [@@deriving hardcaml]
 end
@@ -35,10 +38,17 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_clr_pin = i.opcode ==:. 8 in
   let is_shift_out = i.opcode ==:. 9 in
   let is_uart_tx = i.opcode ==:. 11 in
+  let is_uart_rx = i.opcode ==:. 12 in
 
-  (* Register write control *)
+  let uart_rx_complete =
+    is_uart_rx &: i.uart_rx_valid
+  in
+
   let write_enable =
-    is_set |: is_clr |: is_dec
+    is_set
+    |: is_clr
+    |: is_dec
+    |: uart_rx_complete
   in
 
   let write_register =
@@ -57,15 +67,20 @@ let create (_scope : Scope.t) (i : _ I.t) =
     i.register_value -:. 1
   in
 
+  let uart_rx_data =
+    uresize i.uart_rx_data 32
+  in
+
   let write_data =
     mux2 is_set
       set_data
       (mux2 is_clr
         clr_data
-        dec_data)
+        (mux2 is_dec
+          dec_data
+          uart_rx_data))
   in
 
-  (* GPIO control *)
   let gpio_write_enable =
     is_set_pin |: is_clr_pin
   in
@@ -74,7 +89,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_set_pin
   in
 
-  (* SHIFT_OUT *)
   let shift_load =
     is_shift_out
   in
@@ -83,13 +97,16 @@ let create (_scope : Scope.t) (i : _ I.t) =
     select i.register_value 7 0
   in
 
-  (* UART TX *)
   let uart_start =
     is_uart_tx &: (~:(i.uart_busy))
   in
 
   let uart_data =
     select i.register_value 7 0
+  in
+
+  let uart_rx_consume =
+    uart_rx_complete
   in
 
   { O.write_enable
@@ -101,4 +118,5 @@ let create (_scope : Scope.t) (i : _ I.t) =
   ; shift_data
   ; uart_start
   ; uart_data
+  ; uart_rx_consume
   }

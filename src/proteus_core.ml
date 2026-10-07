@@ -5,6 +5,7 @@ module I = struct
   type 'a t =
     { clk : 'a
     ; reset : 'a
+    ; uart_rx : 'a
     }
   [@@deriving hardcaml]
 end
@@ -47,6 +48,7 @@ let create (scope : Scope.t) (i : _ I.t) =
 
   let uart_start = wire 1 in
   let uart_data = wire 8 in
+  let uart_rx_consume = wire 1 in
 
   let pc =
     Program_counter.create scope
@@ -81,13 +83,34 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
+  let configured_uart_bit_period =
+  select registers.r1 7 0
+in
+
+let uart_bit_period =
+  mux2
+    (configured_uart_bit_period ==:. 0)
+    (of_int ~width:8 8)
+    configured_uart_bit_period
+in
+
   let uart_tx =
     Uart_tx.create scope
       { Uart_tx.I.clk = i.clk
       ; reset = i.reset
       ; start = uart_start
       ; data_in = uart_data
-      ; bit_period = of_int ~width:8 8
+      ; bit_period = uart_bit_period
+      }
+  in
+
+  let uart_rx =
+    Uart_rx.create scope
+      { Uart_rx.I.clk = i.clk
+      ; reset = i.reset
+      ; rx = i.uart_rx
+      ; bit_period = uart_bit_period
+      ; consume = uart_rx_consume
       }
   in
 
@@ -98,6 +121,8 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; immediate = decoded.immediate
       ; register_value = registers.read_data
       ; uart_busy = uart_tx.busy
+      ; uart_rx_valid = uart_rx.valid
+      ; uart_rx_data = uart_rx.data_out
       }
   in
 
@@ -113,6 +138,7 @@ let create (scope : Scope.t) (i : _ I.t) =
 
   assign uart_start execution.uart_start;
   assign uart_data execution.uart_data;
+  assign uart_rx_consume execution.uart_rx_consume;
 
   let wait_counter =
     Wait_counter.create scope
@@ -133,6 +159,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; wait_done = wait_counter.done_
       ; uart_busy = uart_tx.busy
       ; uart_done = uart_tx.done_
+      ; uart_rx_valid = uart_rx.valid
       }
   in
 
@@ -156,7 +183,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; reset = i.reset
       ; start = shift_load
       ; data_in = shift_data
-      ; bit_period = of_int ~width:8 8
+      ; bit_period = uart_bit_period
       }
   in
 

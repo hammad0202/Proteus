@@ -4,6 +4,7 @@ module proteus_core_tb;
 
     reg clk;
     reg reset;
+    reg uart_rx;
 
     wire [7:0]  pc;
     wire [15:0] instruction;
@@ -20,9 +21,14 @@ module proteus_core_tb;
     wire shift_busy;
     wire uart_busy;
 
+    localparam integer BIT_PERIOD = 8;
+    localparam integer CLOCK_NS = 10;
+    localparam integer BIT_NS = BIT_PERIOD * CLOCK_NS;
+
     proteus_core dut (
         .clk(clk),
         .reset(reset),
+        .uart_rx(uart_rx),
         .pc(pc),
         .instruction(instruction),
         .opcode(opcode),
@@ -39,9 +45,37 @@ module proteus_core_tb;
 
     always #5 clk = ~clk;
 
+    task send_uart_byte;
+        input [7:0] data;
+        integer i;
+        begin
+            // Idle
+            uart_rx = 1'b1;
+            #(BIT_NS);
+
+            // Start bit
+            uart_rx = 1'b0;
+            #(BIT_NS);
+
+            // Data bits, LSB first
+            for (i = 0; i < 8; i = i + 1) begin
+                uart_rx = data[i];
+                #(BIT_NS);
+            end
+
+            // Stop bit
+            uart_rx = 1'b1;
+            #(BIT_NS);
+
+            // Extra idle time
+            #(BIT_NS);
+        end
+    endtask
+
     initial begin
         clk = 0;
         reset = 1;
+        uart_rx = 1;
 
         $dumpfile("sim/proteus_core.vcd");
         $dumpvars(0, proteus_core_tb);
@@ -63,10 +97,63 @@ module proteus_core_tb;
             uart_busy
         );
 
-        #12 reset = 0;
+        #20;
+        reset = 0;
 
-        // Let the CPU execute SET + UART_TX.
-        #1000 $finish;
+        #100;
+
+        if (r1 !== 32'h00000008) begin
+            $display("");
+            $display("ERROR: UART BIT PERIOD REGISTER FAILED");
+            $display("Expected R1 = 0x00000008");
+            $display("Got R1 = 0x%h", r1);
+            $finish;
+        end
+
+        $display("");
+        $display("========================================");
+        $display("UART BIT PERIOD CONFIGURED");
+        $display("R1 = %0d cycles", r1);
+        $display("========================================");
+        $display("");
+
+        $display("");
+        $display("========================================");
+        $display("Sending UART byte 0x41 ('A') to PROTEUS");
+        $display("========================================");
+        $display("");
+
+        send_uart_byte(8'h41);
+
+        #100;
+
+        if (r0 !== 32'h00000041) begin
+            $display("ERROR: R0 expected 0x00000041, got 0x%h", r0);
+            $finish;
+        end
+
+        $display("");
+        $display("========================================");
+        $display("UART RX SUCCESS");
+        $display("R0 = 0x%h", r0);
+        $display("========================================");
+        $display("");
+
+        wait (uart_busy == 1'b1);
+        $display("UART TX started.");
+
+        wait (uart_busy == 1'b0);
+        $display("UART TX completed.");
+
+        $display("");
+        $display("========================================");
+        $display("EXPECTED ECHO: 0x41 ('A')");
+        $display("========================================");
+        $display("");
+
+        #100;
+
+        $finish;
     end
 
 endmodule

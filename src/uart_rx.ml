@@ -60,9 +60,12 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_data = state ==: data_state in
   let is_stop = state ==: stop_state in
 
-  let timer_done = timer ==:. 0 in
+  let timer_done =
+    timer ==:. 0
+  in
 
-  (* Half-bit delay for center sampling of start bit. *)
+  (* Calculate half the programmable bit period.
+     For bit_period = 8, this produces 4. *)
   let half_period =
     uresize
       (select i.bit_period 7 1)
@@ -73,26 +76,27 @@ let create (_scope : Scope.t) (i : _ I.t) =
     half_period -:. 1
   in
 
+  (* Full programmable bit period. *)
   let full_timer =
     i.bit_period -:. 1
   in
 
-  (* Start bit detected when RX is low while idle. *)
+  (* Detect falling edge into the UART start bit. *)
   let start_detect =
     is_idle &: (~:rx_sync2)
   in
 
-  (* Center of start bit. *)
+  (* Sample the center of the start bit. *)
   let start_sample =
     is_start &: timer_done
   in
 
-  (* Center of each data bit. *)
+  (* Sample the center of each data bit. *)
   let data_sample =
     is_data &: timer_done
   in
 
-  (* Center of stop bit. *)
+  (* Sample the center of the stop bit. *)
   let stop_sample =
     is_stop &: timer_done
   in
@@ -146,7 +150,8 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   let timer_running =
-    mux2 (is_start |: is_data |: is_stop)
+    mux2
+      (is_start |: is_data |: is_stop)
       timer_decrement
       timer
   in
@@ -184,7 +189,8 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   let bit_count_after_sample =
-    mux2 (bit_count ==:. 7)
+    mux2
+      (bit_count ==:. 7)
       (zero 4)
       incremented_bit_count
   in
@@ -199,7 +205,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   (* DATA REGISTER                                                *)
   (* ------------------------------------------------------------ *)
 
-  (* UART data arrives LSB first.
+  (* UART transmits LSB first.
      Shift each received bit into the MSB side. *)
   let shifted_data =
     concat_msb
@@ -219,7 +225,8 @@ let create (_scope : Scope.t) (i : _ I.t) =
   (* ------------------------------------------------------------ *)
 
   let valid_after_receive =
-    mux2 (stop_sample &: rx_sync2)
+    mux2
+      (stop_sample &: rx_sync2)
       vdd
       valid_reg
   in
@@ -231,7 +238,8 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   let error_after_receive =
-    mux2 (stop_sample &: (~:rx_sync2))
+    mux2
+      (stop_sample &: (~:rx_sync2))
       vdd
       error_reg
   in

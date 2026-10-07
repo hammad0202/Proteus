@@ -20,17 +20,13 @@ let create (_scope : Scope.t) (i : _ I.t) =
     Array.init 256 (fun address ->
       match address with
 
-      (* H *)
-      | 0 -> of_int ~width:16 0x1048  (* SET R0, 0x48 *)
-      | 1 -> of_int ~width:16 0xB000  (* UART_TX R0 *)
+      (* UART configuration *)
+      | 0 -> of_int ~width:16 0x1108  (* SET R1, 8 *)
 
-      (* I *)
-      | 2 -> of_int ~width:16 0x1049  (* SET R0, 0x49 *)
-      | 3 -> of_int ~width:16 0xB000  (* UART_TX R0 *)
-
-      (* ! *)
-      | 4 -> of_int ~width:16 0x1021  (* SET R0, 0x21 *)
-      | 5 -> of_int ~width:16 0xB000  (* UART_TX R0 *)
+      (* UART echo program *)
+      | 1 -> of_int ~width:16 0xC000  (* UART_RX R0 *)
+      | 2 -> of_int ~width:16 0xB000  (* UART_TX R0 *)
+      | 3 -> of_int ~width:16 0x4000  (* JMP 0 *)
 
       (* NOP *)
       | _ -> of_int ~width:16 0x0000)
