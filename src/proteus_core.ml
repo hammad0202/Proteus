@@ -24,11 +24,19 @@ module O = struct
     ; gpio_out : 'a
     ; shift_busy : 'a
     ; uart_busy : 'a
+    ; spi_sclk : 'a
+    ; spi_mosi : 'a
+    ; spi_cs_n : 'a
+    ; spi_busy : 'a
     }
   [@@deriving hardcaml]
 end
 
 let create (scope : Scope.t) (i : _ I.t) =
+
+  (* ------------------------------------------------------------ *)
+  (* INTERNAL CONTROL WIRES                                       *)
+  (* ------------------------------------------------------------ *)
 
   let pc_enable = wire 1 in
   let pc_jump = wire 1 in
@@ -50,6 +58,13 @@ let create (scope : Scope.t) (i : _ I.t) =
   let uart_data = wire 8 in
   let uart_rx_consume = wire 1 in
 
+  let spi_start = wire 1 in
+  let spi_data = wire 8 in
+
+  (* ------------------------------------------------------------ *)
+  (* PROGRAM COUNTER                                              *)
+  (* ------------------------------------------------------------ *)
+
   let pc =
     Program_counter.create scope
       { Program_counter.I.clk = i.clk
@@ -60,17 +75,29 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
+  (* ------------------------------------------------------------ *)
+  (* INSTRUCTION MEMORY                                           *)
+  (* ------------------------------------------------------------ *)
+
   let memory =
     Instruction_memory.create scope
       { Instruction_memory.I.address = pc.pc
       }
   in
 
+  (* ------------------------------------------------------------ *)
+  (* INSTRUCTION DECODER                                          *)
+  (* ------------------------------------------------------------ *)
+
   let decoded =
     Instruction.create scope
       { Instruction.I.instruction = memory.instruction
       }
   in
+
+  (* ------------------------------------------------------------ *)
+  (* REGISTER FILE                                                *)
+  (* ------------------------------------------------------------ *)
 
   let registers =
     Register_file.create scope
@@ -83,16 +110,25 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  let configured_uart_bit_period =
-  select registers.r1 7 0
-in
+  (* ------------------------------------------------------------ *)
+  (* PROGRAMMABLE PROTOCOL TIMING                                 *)
+  (* ------------------------------------------------------------ *)
 
-let uart_bit_period =
-  mux2
-    (configured_uart_bit_period ==:. 0)
-    (of_int ~width:8 8)
-    configured_uart_bit_period
-in
+  let configured_protocol_period =
+    select registers.r1 7 0
+  in
+
+  (* R1 = 0 is treated as a safe default of 8 cycles. *)
+  let protocol_period =
+    mux2
+      (configured_protocol_period ==:. 0)
+      (of_int ~width:8 8)
+      configured_protocol_period
+  in
+
+  (* ------------------------------------------------------------ *)
+  (* UART TX                                                      *)
+  (* ------------------------------------------------------------ *)
 
   let uart_tx =
     Uart_tx.create scope
@@ -100,19 +136,41 @@ in
       ; reset = i.reset
       ; start = uart_start
       ; data_in = uart_data
-      ; bit_period = uart_bit_period
+      ; bit_period = protocol_period
       }
   in
+
+  (* ------------------------------------------------------------ *)
+  (* UART RX                                                      *)
+  (* ------------------------------------------------------------ *)
 
   let uart_rx =
     Uart_rx.create scope
       { Uart_rx.I.clk = i.clk
       ; reset = i.reset
       ; rx = i.uart_rx
-      ; bit_period = uart_bit_period
+      ; bit_period = protocol_period
       ; consume = uart_rx_consume
       }
   in
+
+  (* ------------------------------------------------------------ *)
+  (* SPI MASTER                                                   *)
+  (* ------------------------------------------------------------ *)
+
+  let spi =
+    Spi_master.create scope
+      { Spi_master.I.clk = i.clk
+      ; reset = i.reset
+      ; start = spi_start
+      ; data_in = spi_data
+      ; clock_period = protocol_period
+      }
+  in
+
+  (* ------------------------------------------------------------ *)
+  (* EXECUTION UNIT                                               *)
+  (* ------------------------------------------------------------ *)
 
   let execution =
     Execution_unit.create scope
@@ -123,6 +181,7 @@ in
       ; uart_busy = uart_tx.busy
       ; uart_rx_valid = uart_rx.valid
       ; uart_rx_data = uart_rx.data_out
+      ; spi_busy = spi.busy
       }
   in
 
@@ -140,6 +199,13 @@ in
   assign uart_data execution.uart_data;
   assign uart_rx_consume execution.uart_rx_consume;
 
+  assign spi_start execution.spi_start;
+  assign spi_data execution.spi_data;
+
+  (* ------------------------------------------------------------ *)
+  (* WAIT COUNTER                                                 *)
+  (* ------------------------------------------------------------ *)
+
   let wait_counter =
     Wait_counter.create scope
       { Wait_counter.I.clk = i.clk
@@ -149,6 +215,10 @@ in
       ; cycles = decoded.immediate
       }
   in
+
+  (* ------------------------------------------------------------ *)
+  (* PROGRAM COUNTER CONTROL                                      *)
+  (* ------------------------------------------------------------ *)
 
   let pc_control =
     Pc_control.create scope
@@ -160,6 +230,8 @@ in
       ; uart_busy = uart_tx.busy
       ; uart_done = uart_tx.done_
       ; uart_rx_valid = uart_rx.valid
+      ; spi_busy = spi.busy
+      ; spi_done = spi.done_
       }
   in
 
@@ -167,6 +239,10 @@ in
   assign pc_jump pc_control.pc_jump;
   assign pc_target pc_control.pc_target;
   assign wait_load pc_control.wait_load;
+
+  (* ------------------------------------------------------------ *)
+  (* GPIO                                                         *)
+  (* ------------------------------------------------------------ *)
 
   let gpio =
     Gpio.create scope
@@ -177,31 +253,47 @@ in
       }
   in
 
+  (* ------------------------------------------------------------ *)
+  (* GENERIC SHIFT OUTPUT                                         *)
+  (* ------------------------------------------------------------ *)
+
   let shift_out =
     Shift_out.create scope
       { Shift_out.I.clk = i.clk
       ; reset = i.reset
       ; start = shift_load
       ; data_in = shift_data
-      ; bit_period = uart_bit_period
+      ; bit_period = protocol_period
       }
   in
+
+  (* ------------------------------------------------------------ *)
+  (* OUTPUTS                                                      *)
+  (* ------------------------------------------------------------ *)
 
   { O.pc = pc.pc
   ; instruction = memory.instruction
   ; opcode = decoded.opcode
   ; register = decoded.register
   ; immediate = decoded.immediate
+
   ; r0 = registers.r0
   ; r1 = registers.r1
   ; r2 = registers.r2
   ; r3 = registers.r3
+
   ; gpio_out =
       mux2 uart_tx.busy
         uart_tx.tx
         (mux2 shift_out.busy
           shift_out.data_out
           gpio.gpio_out)
+
   ; shift_busy = shift_out.busy
   ; uart_busy = uart_tx.busy
+
+  ; spi_sclk = spi.sclk
+  ; spi_mosi = spi.mosi
+  ; spi_cs_n = spi.cs_n
+  ; spi_busy = spi.busy
   }

@@ -15,6 +15,7 @@
   shift_out
   uart_tx
   uart_rx
+  spi_master
   proteus_core))
 
 (executable
@@ -71,3 +72,8 @@
  (name generate_uart_rx)
  (libraries proteus hardcaml)
  (modules generate_uart_rx))
+
+(executable
+ (name generate_spi_master)
+ (libraries proteus hardcaml)
+ (modules generate_spi_master))

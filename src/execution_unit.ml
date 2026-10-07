@@ -10,6 +10,7 @@ module I = struct
     ; uart_busy : 'a
     ; uart_rx_valid : 'a
     ; uart_rx_data : 'a [@bits 8]
+    ; spi_busy : 'a
     }
   [@@deriving hardcaml]
 end
@@ -26,6 +27,8 @@ module O = struct
     ; uart_start : 'a
     ; uart_data : 'a [@bits 8]
     ; uart_rx_consume : 'a
+    ; spi_start : 'a
+    ; spi_data : 'a [@bits 8]
     }
   [@@deriving hardcaml]
 end
@@ -39,6 +42,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_shift_out = i.opcode ==:. 9 in
   let is_uart_tx = i.opcode ==:. 11 in
   let is_uart_rx = i.opcode ==:. 12 in
+  let is_spi_tx = i.opcode ==:. 13 in
 
   let uart_rx_complete =
     is_uart_rx &: i.uart_rx_valid
@@ -109,6 +113,14 @@ let create (_scope : Scope.t) (i : _ I.t) =
     uart_rx_complete
   in
 
+  let spi_start =
+    is_spi_tx &: (~:(i.spi_busy))
+  in
+
+  let spi_data =
+    select i.register_value 7 0
+  in
+
   { O.write_enable
   ; write_register
   ; write_data
@@ -119,4 +131,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
   ; uart_start
   ; uart_data
   ; uart_rx_consume
+  ; spi_start
+  ; spi_data
   }
