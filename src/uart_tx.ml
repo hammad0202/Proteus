@@ -29,14 +29,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
       ()
   in
 
-  (* UART frame:
-     start bit = 0
-     8 data bits, LSB first
-     stop bit = 1
-
-     Total = 10 bits.
-  *)
-
   let shift_reg = wire 10 in
   let bits_remaining = wire 4 in
   let timer = wire 8 in
@@ -53,11 +45,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
     busy &: timer_done
   in
 
-  (* Frame is:
-       bit 0 = start
-       bits 1..8 = data, LSB first
-       bit 9 = stop
-  *)
+  (* UART frame: stop bit, data bits, start bit *)
   let frame =
     concat_msb
       [ of_int ~width:1 1
@@ -66,10 +54,11 @@ let create (_scope : Scope.t) (i : _ I.t) =
       ]
   in
 
+  (* Shift right, inserting a high bit at the MSB. *)
   let shifted =
     concat_msb
-      [ select shift_reg 8 0
-      ; of_int ~width:1 1
+      [ of_int ~width:1 1
+      ; select shift_reg 9 1
       ]
   in
 
@@ -109,7 +98,14 @@ let create (_scope : Scope.t) (i : _ I.t) =
   assign bits_remaining (reg spec next_bits_remaining);
   assign timer (reg spec next_timer);
 
-  { O.tx = select shift_reg 0 0
+  (* UART line must be high when idle. *)
+  let tx =
+    mux2 busy
+      (select shift_reg 0 0)
+      vdd
+  in
+
+  { O.tx = tx
   ; busy
   ; done_
   }

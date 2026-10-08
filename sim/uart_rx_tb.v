@@ -2,16 +2,18 @@
 
 module uart_rx_tb;
 
-    reg clk;
-    reg reset;
-    reg rx;
-    reg [7:0] bit_period;
-    reg consume;
+    reg clk = 0;
+    reg reset = 1;
+    reg rx = 1;
+    reg [7:0] bit_period = 8'd8;
+    reg consume = 0;
 
     wire [7:0] data_out;
     wire valid;
     wire busy;
     wire frame_error;
+
+    integer k;
 
     uart_rx dut (
         .clk(clk),
@@ -27,82 +29,87 @@ module uart_rx_tb;
 
     always #5 clk = ~clk;
 
-    // Send one UART bit.
+    // Each UART bit lasts exactly 8 clock cycles.
     task send_bit;
-        input bit_value;
+        input value;
         begin
-            rx = bit_value;
-            #(80);
+            rx = value;
+            repeat (8) @(negedge clk);
         end
     endtask
 
-    // Send one UART byte, 8N1, LSB first.
+    // Transmit an 8N1 UART frame, LSB first.
     task send_uart_byte;
         input [7:0] data;
-        integer k;
         begin
-            // Start bit
             send_bit(1'b0);
 
-            // Data bits, LSB first
             for (k = 0; k < 8; k = k + 1)
                 send_bit(data[k]);
 
-            // Stop bit
             send_bit(1'b1);
-
-            // Return to idle
             rx = 1'b1;
         end
     endtask
 
     initial begin
-        clk = 0;
-        reset = 1;
-        rx = 1;
-        bit_period = 8;
-        consume = 0;
-
         $dumpfile("sim/uart_rx.vcd");
         $dumpvars(0, uart_rx_tb);
 
-        $monitor(
-            "time=%0t RX=%b BUSY=%b VALID=%b DATA=%h FRAME_ERR=%b",
-            $time,
-            rx,
-            busy,
-            valid,
-            data_out,
-            frame_error
-        );
-
-        // Reset
-        #20;
+        repeat (3) @(negedge clk);
         reset = 0;
 
-        // Idle before transmission
-        #40;
+        repeat (4) @(negedge clk);
 
-        $display("=== Sending byte 0x41 ('A') ===");
+        if (valid !== 1'b0)
+            $fatal(1, "UART RX valid asserted during idle");
+
+        $display("Sending UART byte 0x41");
 
         send_uart_byte(8'h41);
 
-        // Give receiver time to finish
-        #100;
+        repeat (5) @(negedge clk);
 
-        $display("=== RX RESULT ===");
-        $display("DATA = 0x%h", data_out);
-        $display("VALID = %b", valid);
-        $display("FRAME_ERROR = %b", frame_error);
+        if (data_out !== 8'h41)
+            $fatal(
+                1,
+                "UART RX data mismatch: expected 41, got %h",
+                data_out
+            );
 
-        // Consume received byte
+        if (valid !== 1'b1)
+            $fatal(1, "UART RX valid not asserted");
+
+        if (frame_error !== 1'b0)
+            $fatal(1, "UART RX unexpected frame error");
+
+        if (busy !== 1'b0)
+            $fatal(1, "UART RX remained busy");
+
+        // Consume the received byte.
         consume = 1;
-        #10;
+        @(negedge clk);
         consume = 0;
 
-        #20;
+        if (valid !== 1'b0)
+            $fatal(1, "UART RX valid did not clear");
+
+        $display("");
+        $display("========================================");
+        $display("          UART RX VERIFICATION");
+        $display("========================================");
+        $display("Received byte : 0x%02h", data_out);
+        $display("Frame error   : %b", frame_error);
+        $display("========================================");
+        $display("UART RX SUCCESS");
+        $display("========================================");
 
         $finish;
+    end
+
+    initial begin
+        #5000;
+        $fatal(1, "UART RX simulation timeout");
     end
 
 endmodule
