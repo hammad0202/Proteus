@@ -1,3 +1,4 @@
+
 open Hardcaml
 open Signal
 
@@ -7,6 +8,8 @@ module I = struct
     ; reset : 'a
     ; uart_rx : 'a
     ; spi_miso : 'a
+    ; i2c_scl_in : 'a
+    ; i2c_sda_in : 'a
     }
   [@@deriving hardcaml]
 end
@@ -31,20 +34,22 @@ module O = struct
     ; spi_busy : 'a
     ; spi_data_out : 'a [@bits 8]
     ; spi_valid : 'a
+    ; i2c_scl_drive_low : 'a
+    ; i2c_sda_drive_low : 'a
+    ; i2c_busy : 'a
+    ; i2c_done : 'a
+    ; i2c_ack_error : 'a
     }
   [@@deriving hardcaml]
 end
 
 let create (scope : Scope.t) (i : _ I.t) =
 
-  (* ------------------------------------------------------------ *)
-  (* INTERNAL CONTROL WIRES                                       *)
-  (* ------------------------------------------------------------ *)
+  (* CPU control wires *)
 
   let pc_enable = wire 1 in
   let pc_jump = wire 1 in
   let pc_target = wire 8 in
-
   let wait_load = wire 1 in
 
   let register_write_enable = wire 1 in
@@ -64,9 +69,10 @@ let create (scope : Scope.t) (i : _ I.t) =
   let spi_start = wire 1 in
   let spi_data = wire 8 in
 
-  (* ------------------------------------------------------------ *)
-  (* PROGRAM COUNTER                                              *)
-  (* ------------------------------------------------------------ *)
+  let i2c_start = wire 1 in
+  let i2c_data = wire 8 in
+
+  (* Program counter *)
 
   let pc =
     Program_counter.create scope
@@ -78,29 +84,21 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* INSTRUCTION MEMORY                                           *)
-  (* ------------------------------------------------------------ *)
+  (* Instruction memory *)
 
   let memory =
     Instruction_memory.create scope
-      { Instruction_memory.I.address = pc.pc
-      }
+      { Instruction_memory.I.address = pc.pc }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* INSTRUCTION DECODER                                          *)
-  (* ------------------------------------------------------------ *)
+  (* Instruction decoder *)
 
   let decoded =
     Instruction.create scope
-      { Instruction.I.instruction = memory.instruction
-      }
+      { Instruction.I.instruction = memory.instruction }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* REGISTER FILE                                                *)
-  (* ------------------------------------------------------------ *)
+  (* Register file *)
 
   let registers =
     Register_file.create scope
@@ -113,9 +111,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* PROGRAMMABLE PROTOCOL TIMING                                 *)
-  (* ------------------------------------------------------------ *)
+  (* Shared protocol timing *)
 
   let configured_protocol_period =
     select registers.r1 7 0
@@ -128,9 +124,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       configured_protocol_period
   in
 
-  (* ------------------------------------------------------------ *)
-  (* UART TX                                                      *)
-  (* ------------------------------------------------------------ *)
+  (* UART TX *)
 
   let uart_tx =
     Uart_tx.create scope
@@ -142,9 +136,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* UART RX                                                      *)
-  (* ------------------------------------------------------------ *)
+  (* UART RX *)
 
   let uart_rx =
     Uart_rx.create scope
@@ -156,9 +148,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* SPI MASTER                                                   *)
-  (* ------------------------------------------------------------ *)
+  (* SPI master *)
 
   let spi =
     Spi_master.create scope
@@ -171,9 +161,22 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* EXECUTION UNIT                                               *)
-  (* ------------------------------------------------------------ *)
+  (* I2C master *)
+
+  let i2c =
+    I2c_master.create scope
+      { I2c_master.I.clk = i.clk
+      ; reset = i.reset
+      ; start = i2c_start
+      ; address = select registers.r2 6 0
+      ; data_in = i2c_data
+      ; clock_period = protocol_period
+      ; scl_in = i.i2c_scl_in
+      ; sda_in = i.i2c_sda_in
+      }
+  in
+
+  (* Execution unit *)
 
   let execution =
     Execution_unit.create scope
@@ -187,6 +190,8 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; spi_busy = spi.busy
       ; spi_valid = spi.valid
       ; spi_data_out = spi.data_out
+      ; i2c_busy = i2c.busy
+      ; i2c_done = i2c.done_
       }
   in
 
@@ -207,9 +212,10 @@ let create (scope : Scope.t) (i : _ I.t) =
   assign spi_start execution.spi_start;
   assign spi_data execution.spi_data;
 
-  (* ------------------------------------------------------------ *)
-  (* WAIT COUNTER                                                 *)
-  (* ------------------------------------------------------------ *)
+  assign i2c_start execution.i2c_start;
+  assign i2c_data execution.i2c_data;
+
+  (* Wait counter *)
 
   let wait_counter =
     Wait_counter.create scope
@@ -221,9 +227,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* PROGRAM COUNTER CONTROL                                      *)
-  (* ------------------------------------------------------------ *)
+  (* Program counter control *)
 
   let pc_control =
     Pc_control.create scope
@@ -237,6 +241,8 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; uart_rx_valid = uart_rx.valid
       ; spi_busy = spi.busy
       ; spi_valid = spi.valid
+      ; i2c_busy = i2c.busy
+      ; i2c_done = i2c.done_
       }
   in
 
@@ -245,9 +251,7 @@ let create (scope : Scope.t) (i : _ I.t) =
   assign pc_target pc_control.pc_target;
   assign wait_load pc_control.wait_load;
 
-  (* ------------------------------------------------------------ *)
-  (* GPIO                                                         *)
-  (* ------------------------------------------------------------ *)
+  (* GPIO *)
 
   let gpio =
     Gpio.create scope
@@ -258,9 +262,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* GENERIC SHIFT OUTPUT                                         *)
-  (* ------------------------------------------------------------ *)
+  (* Generic shift output *)
 
   let shift_out =
     Shift_out.create scope
@@ -272,9 +274,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* ------------------------------------------------------------ *)
-  (* OUTPUTS                                                      *)
-  (* ------------------------------------------------------------ *)
+  (* Core outputs *)
 
   { O.pc = pc.pc
   ; instruction = memory.instruction
@@ -303,4 +303,10 @@ let create (scope : Scope.t) (i : _ I.t) =
   ; spi_busy = spi.busy
   ; spi_data_out = spi.data_out
   ; spi_valid = spi.valid
+
+  ; i2c_scl_drive_low = i2c.scl_drive_low
+  ; i2c_sda_drive_low = i2c.sda_drive_low
+  ; i2c_busy = i2c.busy
+  ; i2c_done = i2c.done_
+  ; i2c_ack_error = i2c.ack_error
   }
