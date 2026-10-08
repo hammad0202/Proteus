@@ -1,3 +1,4 @@
+
 `timescale 1ns/1ps
 
 module i2c_master_tb;
@@ -20,18 +21,17 @@ module i2c_master_tb;
     wire done_;
     wire ack_error;
 
+    wire [7:0] data_out;
+
     reg slave_sda_drive_low;
 
     integer bit_count;
     reg [7:0] address_capture;
     reg [7:0] data_capture;
 
-    /*
-     * Open-drain I2C bus.
-     *
-     * If nobody pulls the line low,
-     * the pull-up makes it high.
-     */
+    // --------------------------------------------------------
+    // OPEN-DRAIN I2C BUS
+    // --------------------------------------------------------
 
     assign scl =
         scl_drive_low ? 1'b0 : 1'b1;
@@ -41,34 +41,39 @@ module i2c_master_tb;
         ? 1'b0
         : 1'b1;
 
+    // --------------------------------------------------------
+    // DEVICE UNDER TEST
+    // --------------------------------------------------------
+
     i2c_master dut (
         .clk(clk),
         .reset(reset),
         .start(start),
+
+        // Explicitly select I2C WRITE mode.
+        .read_mode(1'b0),
+
         .address(address),
         .data_in(data_in),
         .clock_period(clock_period),
+
         .scl_in(scl),
         .sda_in(sda),
+
         .scl_drive_low(scl_drive_low),
         .sda_drive_low(sda_drive_low),
+
         .busy(busy),
         .done_(done_),
-        .ack_error(ack_error)
+        .ack_error(ack_error),
+        .data_out(data_out)
     );
 
     always #5 clk = ~clk;
 
-    /*
-     * Fake I2C slave.
-     *
-     * Capture bits on rising SCL.
-     *
-     * Bits 0-7   = address + W
-     * Bit 8      = ACK
-     * Bits 9-16  = data
-     * Bit 17     = ACK
-     */
+    // --------------------------------------------------------
+    // FAKE I2C SLAVE
+    // --------------------------------------------------------
 
     always @(posedge scl) begin
 
@@ -80,10 +85,9 @@ module i2c_master_tb;
                     {address_capture[6:0], sda};
 
                 $display(
-                    "ADDRESS BIT %0d: SDA=%b CAPTURE=%02h",
+                    "ADDRESS BIT %0d: SDA=%b",
                     bit_count + 1,
-                    sda,
-                    {address_capture[6:0], sda}
+                    sda
                 );
 
                 bit_count = bit_count + 1;
@@ -102,10 +106,9 @@ module i2c_master_tb;
                     {data_capture[6:0], sda};
 
                 $display(
-                    "DATA BIT %0d: SDA=%b CAPTURE=%02h",
+                    "DATA BIT %0d: SDA=%b",
                     bit_count - 8,
-                    sda,
-                    {data_capture[6:0], sda}
+                    sda
                 );
 
                 bit_count = bit_count + 1;
@@ -122,25 +125,22 @@ module i2c_master_tb;
 
     end
 
-    /*
-     * Slave ACK generation.
-     *
-     * Pull SDA low during the ninth clock
-     * after address and after data.
-     */
+    // --------------------------------------------------------
+    // SLAVE ACK GENERATION
+    // --------------------------------------------------------
 
     always @(negedge scl) begin
 
         if (busy) begin
 
-            if ((bit_count == 8) ||
-                (bit_count == 17)) begin
+            if (
+                (bit_count == 8) ||
+                (bit_count == 17)
+            ) begin
 
                 slave_sda_drive_low <= 1'b1;
 
-                $display(
-                    "SLAVE ACK ENABLED"
-                );
+                $display("SLAVE ACK ENABLED");
 
             end
             else begin
@@ -157,6 +157,10 @@ module i2c_master_tb;
         end
 
     end
+
+    // --------------------------------------------------------
+    // TEST SEQUENCE
+    // --------------------------------------------------------
 
     initial begin
 
@@ -178,7 +182,6 @@ module i2c_master_tb;
         data_capture = 0;
 
         #30;
-
         reset = 0;
 
         #20;
@@ -189,12 +192,10 @@ module i2c_master_tb;
         $display("ADDRESS : 0x50");
         $display("DATA    : 0xA5");
         $display("========================================");
-        $display("");
 
         start = 1;
 
         #10;
-
         start = 0;
 
         wait(done_);
@@ -230,9 +231,9 @@ module i2c_master_tb;
         );
 
         if (
-            address_capture == 8'hA0 &&
-            data_capture == 8'hA5 &&
-            ack_error == 1'b0
+            address_capture === 8'hA0 &&
+            data_capture === 8'hA5 &&
+            ack_error === 1'b0
         ) begin
 
             $display("");
@@ -252,10 +253,21 @@ module i2c_master_tb;
             $display("I2C MASTER ERROR");
             $display("");
 
+            $fatal(1, "I2C write verification failed");
+
         end
 
         $finish;
 
+    end
+
+    // --------------------------------------------------------
+    // TIMEOUT PROTECTION
+    // --------------------------------------------------------
+
+    initial begin
+        #100000;
+        $fatal(1, "I2C write simulation timeout");
     end
 
 endmodule
