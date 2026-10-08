@@ -127,6 +127,89 @@ run_test \
     "PROTEUS CPU I2C READ SUCCESS"
 
 echo
+
+
+# CPU integration tests with independently generated programs.
+# These tests run in a temporary directory so production RTL is unchanged.
+
+run_cpu_test() {
+    local name="$1"
+    local program="$2"
+    local top="$3"
+    local tb="$4"
+    local expected="$5"
+
+    local rtl="$BUILD_DIR/${program}_proteus_core.v"
+    local binary="$BUILD_DIR/${top}_sim"
+    local log="$BUILD_DIR/${top}.log"
+
+    echo "----------------------------------------"
+    echo "TEST: $name"
+    echo "----------------------------------------"
+
+    if ! dune exec src/generate_proteus_core.exe -- "$program" > "$rtl" 2>"$log"; then
+        echo "FAIL: CPU RTL generation error"
+        cat "$log"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+
+    if ! iverilog -g2012 \
+        -s "$top" \
+        -o "$binary" \
+        "$rtl" \
+        "$ROOT/$tb" >"$log" 2>&1; then
+        echo "FAIL: Compilation error"
+        cat "$log"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+
+    if ! (
+        cd "$BUILD_DIR"
+        timeout 15s vvp "$binary"
+    ) >"$log" 2>&1; then
+        echo "FAIL: Simulation error or timeout"
+        cat "$log"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+
+    if ! grep -Fxq "$expected" "$log"; then
+        echo "FAIL: Expected success message missing"
+        cat "$log"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+
+    if grep -Eiq \
+        '(^ERROR:|^FATAL:|^FAIL:|FAILED)' \
+        "$log"; then
+        echo "FAIL: Testbench reported failure"
+        cat "$log"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+
+    echo "PASS: $name"
+    PASSED=$((PASSED + 1))
+    echo
+}
+
+run_cpu_test \
+    "CPU SPI Transfer" \
+    "spi" \
+    "proteus_core_tb" \
+    "sim/proteus_core_tb.v" \
+    "CPU SPI_XFER SUCCESS"
+
+run_cpu_test \
+    "CPU I2C Write" \
+    "i2c_write" \
+    "proteus_i2c_tb" \
+    "sim/proteus_i2c_tb.v" \
+    "PROTEUS CPU I2C SUCCESS"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
