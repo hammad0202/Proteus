@@ -1,4 +1,3 @@
-
 open Hardcaml
 open Signal
 
@@ -18,6 +17,7 @@ type program =
   | I2c_read
   | I2c_write
   | Spi_transfer
+  | Uart_loopback
 
 let selected_program = ref I2c_read
 
@@ -41,6 +41,11 @@ let instruction_at program address =
   | Spi_transfer, 1 -> 0x1108
   | Spi_transfer, 2 -> 0xD000
   | Spi_transfer, 3 -> 0x4003
+
+  | Uart_loopback, 0 -> 0x1108
+  | Uart_loopback, 1 -> 0xC000
+  | Uart_loopback, 2 -> 0xB000
+  | Uart_loopback, 3 -> 0x4001
 
   | _ -> 0x0000
 

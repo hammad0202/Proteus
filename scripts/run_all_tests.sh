@@ -188,6 +188,14 @@ run_cpu_test \
     "sim/proteus_i2c_tb.v" \
     "PROTEUS CPU I2C SUCCESS"
 
+
+run_cpu_test \
+    "CPU UART Loopback" \
+    "uart_loopback" \
+    "proteus_uart_loopback_tb" \
+    "sim/proteus_uart_loopback_tb.v" \
+    "CPU UART LOOPBACK SUCCESS"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
@@ -196,7 +204,7 @@ echo "Failed: $FAILED"
 echo "Total : $((PASSED + FAILED))"
 echo "========================================"
 
-if (( FAILED > 0 || PASSED != 8 )); then
+if (( FAILED > 0 || PASSED != 9 )); then
     echo "VERIFICATION FAILED"
     exit 1
 fi

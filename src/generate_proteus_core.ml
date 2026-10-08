@@ -1,4 +1,3 @@
-
 open Hardcaml
 
 let () =
@@ -16,9 +15,12 @@ let () =
     | [_; "spi"] ->
         Proteus.Instruction_memory.Spi_transfer
 
+    | [_; "uart_loopback"] ->
+        Proteus.Instruction_memory.Uart_loopback
+
     | _ ->
         prerr_endline
-          "Usage: generate_proteus_core.exe [i2c_read|i2c_write|spi]";
+          "Usage: generate_proteus_core.exe [i2c_read|i2c_write|spi|uart_loopback]";
         exit 1
   in
 
