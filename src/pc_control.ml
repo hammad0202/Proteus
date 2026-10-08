@@ -1,3 +1,4 @@
+
 open Hardcaml
 open Signal
 
@@ -37,30 +38,18 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_uart_rx = i.opcode ==:. 12 in
   let is_spi_xfer = i.opcode ==:. 13 in
   let is_i2c_write = i.opcode ==:. 14 in
+  let is_i2c_read = i.opcode ==:. 15 in
 
-  let register_nonzero =
-    i.register_value <>:. 0
-  in
-
-  let jnz_taken =
-    is_jnz &: register_nonzero
-  in
-
-  let pc_jump =
-    is_jmp |: jnz_taken
-  in
+  let register_nonzero = i.register_value <>:. 0 in
+  let jnz_taken = is_jnz &: register_nonzero in
+  let pc_jump = is_jmp |: jnz_taken in
 
   let wait_load =
     is_wait &: (~:(i.wait_busy))
   in
 
-  let wait_active =
-    is_wait &: i.wait_busy
-  in
-
-  let wait_finished =
-    is_wait &: i.wait_done
-  in
+  let wait_active = is_wait &: i.wait_busy in
+  let wait_finished = is_wait &: i.wait_done in
 
   let uart_tx_finished =
     is_uart_tx &: i.uart_done
@@ -74,16 +63,15 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_spi_xfer &: i.spi_valid
   in
 
-  let i2c_write_finished =
-    is_i2c_write &: i.i2c_done
-  in
+  let is_i2c = is_i2c_write |: is_i2c_read in
+  let i2c_finished = is_i2c &: i.i2c_done in
 
   let pc_enable =
     ((~:wait_active) |: wait_finished)
     &: ((~:is_uart_tx) |: uart_tx_finished)
     &: ((~:is_uart_rx) |: uart_rx_finished)
     &: ((~:is_spi_xfer) |: spi_xfer_finished)
-    &: ((~:is_i2c_write) |: i2c_write_finished)
+    &: ((~:is_i2c) |: i2c_finished)
   in
 
   { O.pc_enable

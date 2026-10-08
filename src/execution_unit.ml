@@ -1,3 +1,4 @@
+
 open Hardcaml
 open Signal
 
@@ -15,6 +16,7 @@ module I = struct
     ; spi_data_out : 'a [@bits 8]
     ; i2c_busy : 'a
     ; i2c_done : 'a
+    ; i2c_data_out : 'a [@bits 8]
     }
   [@@deriving hardcaml]
 end
@@ -34,6 +36,7 @@ module O = struct
     ; spi_start : 'a
     ; spi_data : 'a [@bits 8]
     ; i2c_start : 'a
+    ; i2c_read_mode : 'a
     ; i2c_data : 'a [@bits 8]
     }
   [@@deriving hardcaml]
@@ -50,6 +53,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let is_uart_rx = i.opcode ==:. 12 in
   let is_spi_xfer = i.opcode ==:. 13 in
   let is_i2c_write = i.opcode ==:. 14 in
+  let is_i2c_read = i.opcode ==:. 15 in
 
   let uart_rx_complete =
     is_uart_rx &: i.uart_rx_valid
@@ -59,12 +63,17 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_spi_xfer &: i.spi_valid
   in
 
+  let i2c_read_complete =
+    is_i2c_read &: i.i2c_done
+  in
+
   let write_enable =
     is_set
     |: is_clr
     |: is_dec
     |: uart_rx_complete
     |: spi_xfer_complete
+    |: i2c_read_complete
   in
 
   let write_register =
@@ -76,6 +85,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
   let dec_data = i.register_value -:. 1 in
   let uart_rx_data = uresize i.uart_rx_data 32 in
   let spi_rx_data = uresize i.spi_data_out 32 in
+  let i2c_rx_data = uresize i.i2c_data_out 32 in
 
   let write_data =
     mux2 is_set
@@ -86,11 +96,14 @@ let create (_scope : Scope.t) (i : _ I.t) =
           dec_data
           (mux2 uart_rx_complete
             uart_rx_data
-            spi_rx_data)))
+            (mux2 spi_xfer_complete
+              spi_rx_data
+              i2c_rx_data))))
   in
 
   let gpio_write_enable = is_set_pin |: is_clr_pin in
   let gpio_write_data = is_set_pin in
+
   let shift_load = is_shift_out in
   let shift_data = select i.register_value 7 0 in
 
@@ -98,10 +111,7 @@ let create (_scope : Scope.t) (i : _ I.t) =
     is_uart_tx &: (~:(i.uart_busy))
   in
 
-  let uart_data =
-    select i.register_value 7 0
-  in
-
+  let uart_data = select i.register_value 7 0 in
   let uart_rx_consume = uart_rx_complete in
 
   let spi_start =
@@ -110,19 +120,18 @@ let create (_scope : Scope.t) (i : _ I.t) =
     &: (~:(i.spi_valid))
   in
 
-  let spi_data =
-    select i.register_value 7 0
-  in
+  let spi_data = select i.register_value 7 0 in
+
+  let is_i2c = is_i2c_write |: is_i2c_read in
 
   let i2c_start =
-    is_i2c_write
+    is_i2c
     &: (~:(i.i2c_busy))
     &: (~:(i.i2c_done))
   in
 
-  let i2c_data =
-    select i.register_value 7 0
-  in
+  let i2c_read_mode = is_i2c_read in
+  let i2c_data = select i.register_value 7 0 in
 
   { O.write_enable
   ; write_register
@@ -137,6 +146,6 @@ let create (_scope : Scope.t) (i : _ I.t) =
   ; spi_start
   ; spi_data
   ; i2c_start
+  ; i2c_read_mode
   ; i2c_data
   }
-

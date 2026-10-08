@@ -70,6 +70,7 @@ let create (scope : Scope.t) (i : _ I.t) =
   let spi_data = wire 8 in
 
   let i2c_start = wire 1 in
+  let i2c_read_mode = wire 1 in
   let i2c_data = wire 8 in
 
   (* Program counter *)
@@ -111,7 +112,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* Shared protocol timing *)
+  (* Protocol timing: R1 controls the clock period *)
 
   let configured_protocol_period =
     select registers.r1 7 0
@@ -124,7 +125,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       configured_protocol_period
   in
 
-  (* UART TX *)
+  (* UART transmitter *)
 
   let uart_tx =
     Uart_tx.create scope
@@ -136,7 +137,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* UART RX *)
+  (* UART receiver *)
 
   let uart_rx =
     Uart_rx.create scope
@@ -161,13 +162,14 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* I2C master *)
+  (* I2C master: supports WRITE and READ *)
 
   let i2c =
     I2c_master.create scope
       { I2c_master.I.clk = i.clk
       ; reset = i.reset
       ; start = i2c_start
+      ; read_mode = i2c_read_mode
       ; address = select registers.r2 6 0
       ; data_in = i2c_data
       ; clock_period = protocol_period
@@ -192,6 +194,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       ; spi_data_out = spi.data_out
       ; i2c_busy = i2c.busy
       ; i2c_done = i2c.done_
+      ; i2c_data_out = i2c.data_out
       }
   in
 
@@ -213,6 +216,7 @@ let create (scope : Scope.t) (i : _ I.t) =
   assign spi_data execution.spi_data;
 
   assign i2c_start execution.i2c_start;
+  assign i2c_read_mode execution.i2c_read_mode;
   assign i2c_data execution.i2c_data;
 
   (* Wait counter *)
@@ -262,7 +266,7 @@ let create (scope : Scope.t) (i : _ I.t) =
       }
   in
 
-  (* Generic shift output *)
+  (* Shift output *)
 
   let shift_out =
     Shift_out.create scope
@@ -281,7 +285,6 @@ let create (scope : Scope.t) (i : _ I.t) =
   ; opcode = decoded.opcode
   ; register = decoded.register
   ; immediate = decoded.immediate
-
   ; r0 = registers.r0
   ; r1 = registers.r1
   ; r2 = registers.r2
