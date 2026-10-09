@@ -228,6 +228,14 @@ run_test \
     "sim/uart_variable_baud_tb.v" \
     "UART VARIABLE BAUD SUCCESS"
 
+
+run_cpu_test \
+    "CPU UART Timing" \
+    "uart_loopback_16" \
+    "proteus_uart_timing_tb" \
+    "sim/proteus_uart_timing_tb.v" \
+    "CPU UART TIMING SUCCESS"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
@@ -236,7 +244,7 @@ echo "Failed: $FAILED"
 echo "Total : $((PASSED + FAILED))"
 echo "========================================"
 
-if (( FAILED > 0 || PASSED != 13 )); then
+if (( FAILED > 0 || PASSED != 14 )); then
     echo "VERIFICATION FAILED"
     exit 1
 fi

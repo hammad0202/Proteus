@@ -18,6 +18,9 @@ let () =
     | [_; "uart_loopback"] ->
         Proteus.Instruction_memory.Uart_loopback
 
+    | [_; "uart_loopback_16"] ->
+        Proteus.Instruction_memory.Uart_loopback_16
+
     | _ ->
         prerr_endline
           "Usage: generate_proteus_core.exe [i2c_read|i2c_write|spi|uart_loopback]";

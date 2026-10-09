@@ -18,6 +18,7 @@ type program =
   | I2c_write
   | Spi_transfer
   | Uart_loopback
+  | Uart_loopback_16
 
 let selected_program = ref I2c_read
 
@@ -46,6 +47,11 @@ let instruction_at program address =
   | Uart_loopback, 1 -> 0xC000
   | Uart_loopback, 2 -> 0xB000
   | Uart_loopback, 3 -> 0x4001
+
+  | Uart_loopback_16, 0 -> 0x1110
+  | Uart_loopback_16, 1 -> 0xC000
+  | Uart_loopback_16, 2 -> 0xB000
+  | Uart_loopback_16, 3 -> 0x4001
 
   | _ -> 0x0000
 
