@@ -220,6 +220,14 @@ run_cpu_test \
     "sim/proteus_uart_error_tb.v" \
     "CPU UART ERROR RECOVERY SUCCESS"
 
+
+run_test \
+    "UART Variable Baud" \
+    "uart_variable_baud_tb" \
+    "$BUILD_DIR/uart_rx.v" \
+    "sim/uart_variable_baud_tb.v" \
+    "UART VARIABLE BAUD SUCCESS"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
@@ -228,7 +236,7 @@ echo "Failed: $FAILED"
 echo "Total : $((PASSED + FAILED))"
 echo "========================================"
 
-if (( FAILED > 0 || PASSED != 12 )); then
+if (( FAILED > 0 || PASSED != 13 )); then
     echo "VERIFICATION FAILED"
     exit 1
 fi
