@@ -236,6 +236,14 @@ run_cpu_test \
     "sim/proteus_uart_timing_tb.v" \
     "CPU UART TIMING SUCCESS"
 
+
+run_cpu_test \
+    "CPU UART Gap" \
+    "uart_loopback" \
+    "proteus_uart_gap_tb" \
+    "sim/proteus_uart_gap_tb.v" \
+    "CPU UART GAP CHARACTERIZATION COMPLETE"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
@@ -244,7 +252,7 @@ echo "Failed: $FAILED"
 echo "Total : $((PASSED + FAILED))"
 echo "========================================"
 
-if (( FAILED > 0 || PASSED != 14 )); then
+if (( FAILED > 0 || PASSED != 15 )); then
     echo "VERIFICATION FAILED"
     exit 1
 fi
