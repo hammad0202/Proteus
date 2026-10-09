@@ -238,9 +238,8 @@ let create (_scope : Scope.t) (i : _ I.t) =
   in
 
   let error_after_receive =
-    mux2
-      (stop_sample &: (~:rx_sync2))
-      vdd
+    mux2 stop_sample
+      (~:rx_sync2)
       error_reg
   in
 
