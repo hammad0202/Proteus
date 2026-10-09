@@ -212,6 +212,14 @@ run_test \
     "sim/uart_error_recovery_tb.v" \
     "UART ERROR RECOVERY SUCCESS"
 
+
+run_cpu_test \
+    "CPU UART Error Recovery" \
+    "uart_loopback" \
+    "proteus_uart_error_tb" \
+    "sim/proteus_uart_error_tb.v" \
+    "CPU UART ERROR RECOVERY SUCCESS"
+
 echo "========================================"
 echo "          VERIFICATION SUMMARY"
 echo "========================================"
@@ -220,7 +228,7 @@ echo "Failed: $FAILED"
 echo "Total : $((PASSED + FAILED))"
 echo "========================================"
 
-if (( FAILED > 0 || PASSED != 11 )); then
+if (( FAILED > 0 || PASSED != 12 )); then
     echo "VERIFICATION FAILED"
     exit 1
 fi
